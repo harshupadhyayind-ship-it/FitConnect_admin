@@ -69,6 +69,15 @@ export default function UserDetail() {
   const [showSuspendForm, setShowSuspendForm] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
+  // Edit profile
+  const [editMode, setEditMode] = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [editLoading, setEditLoading] = useState(false);
+
+  // Photos
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [reorderLoading, setReorderLoading] = useState(false);
+
   const fetchUser = async () => {
     try {
       const res = await api.get(`/admin/users/${userId}`);
@@ -111,6 +120,88 @@ export default function UserDetail() {
     });
     if (!ok) return;
     await doAction(async () => { await api.delete(`/admin/users/${userId}`); navigate('/users'); }, 'delete');
+  };
+
+  /* ── Edit profile ── */
+  const handleStartEdit = () => {
+    setEditForm({
+      name:         user.name         || '',
+      email:        user.email        || '',
+      phone:        user.phone        || '',
+      bio:          user.bio          || '',
+      gender:       user.gender       || '',
+      date_of_birth: user.date_of_birth ? user.date_of_birth.split('T')[0] : '',
+      height_cm:    user.height_cm    != null ? String(user.height_cm) : '',
+      weight_kg:    user.weight_kg    != null ? String(user.weight_kg) : '',
+      fitness_level: user.fitness_level || '',
+      user_type:    user.user_type    || '',
+      specialty:    user.specialty    || '',
+      credentials:  (user.credentials || []).join(', '),
+    });
+    setEditMode(true);
+  };
+
+  const handleSaveEdit = async () => {
+    setEditLoading(true);
+    try {
+      const payload = { ...editForm };
+      if (payload.credentials !== undefined) {
+        payload.credentials = payload.credentials.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      if (payload.height_cm !== '') payload.height_cm = parseFloat(payload.height_cm);
+      if (payload.weight_kg !== '') payload.weight_kg = parseFloat(payload.weight_kg);
+      await api.patch(`/admin/users/${userId}`, payload);
+      await fetchUser();
+      setEditMode(false);
+      showAlert('Profile updated successfully.', { title: 'Saved', variant: 'success' });
+    } catch (err) {
+      showAlert(err.response?.data?.error || err.message, { title: 'Save Failed', variant: 'error' });
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const ef = (key) => (e) => setEditForm(f => ({ ...f, [key]: e.target.value }));
+
+  /* ── Photos ── */
+  const handleAddPhoto = async (file) => {
+    if (!file) return;
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if (!['jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
+      return showAlert('Invalid file type. Allowed: JPG, JPEG, PNG, WebP', { title: 'Invalid File', variant: 'warning' });
+    }
+    if (photos.length >= 6) {
+      return showAlert('Maximum 6 photos allowed. Delete one first.', { title: 'Limit Reached', variant: 'warning' });
+    }
+    setPhotoUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      await api.post(`/admin/users/${userId}/photos`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      await fetchUser();
+    } catch (err) {
+      showAlert(err.response?.data?.error || err.message, { title: 'Upload Failed', variant: 'error' });
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
+
+  const handleReorder = async (fromIndex, toIndex) => {
+    if (toIndex < 0 || toIndex >= photos.length) return;
+    const reordered = [...photos];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+    setPhotos(reordered); // optimistic
+    setReorderLoading(true);
+    try {
+      await api.patch(`/admin/users/${userId}/photos/reorder`, { orderedIds: reordered.map(p => p.id) });
+      await fetchUser();
+    } catch (err) {
+      await fetchUser(); // revert
+      showAlert(err.response?.data?.error || err.message, { title: 'Reorder Failed', variant: 'error' });
+    } finally {
+      setReorderLoading(false);
+    }
   };
 
   if (loading) return (
@@ -260,9 +351,73 @@ export default function UserDetail() {
 
           {/* ── OVERVIEW ── */}
           {activeTab === 'overview' && (
+            <div className="space-y-4">
+              {/* Edit toolbar */}
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Profile Details</p>
+                {!editMode ? (
+                  <button onClick={handleStartEdit}
+                    className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                    Edit Details
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setEditMode(false)} disabled={editLoading}
+                      className="px-3.5 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 text-gray-500 hover:bg-gray-100 transition-colors disabled:opacity-50">
+                      Cancel
+                    </button>
+                    <button onClick={handleSaveEdit} disabled={editLoading}
+                      className="flex items-center gap-1.5 bg-indigo-600 text-white hover:bg-indigo-700 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50">
+                      {editLoading ? (
+                        <><svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity=".3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/></svg>Saving…</>
+                      ) : (
+                        <><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><polyline points="20 6 9 17 4 12"/></svg>Save Changes</>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Personal Information</p>
+                {editMode ? (
+                  <div className="space-y-2">
+                    {[
+                      { label: 'Full Name', key: 'name', type: 'text' },
+                      { label: 'Email', key: 'email', type: 'email' },
+                      { label: 'Phone', key: 'phone', type: 'tel' },
+                      { label: 'Date of Birth', key: 'date_of_birth', type: 'date' },
+                      { label: 'Height (cm)', key: 'height_cm', type: 'number' },
+                      { label: 'Weight (kg)', key: 'weight_kg', type: 'number' },
+                    ].map(({ label, key, type }) => (
+                      <div key={key} className="flex items-center gap-2">
+                        <label className="text-xs text-gray-400 font-medium w-32 flex-shrink-0">{label}</label>
+                        <input type={type} value={editForm[key] || ''} onChange={ef(key)}
+                          className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"/>
+                      </div>
+                    ))}
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-gray-400 font-medium w-32 flex-shrink-0">Gender</label>
+                      <select value={editForm.gender || ''} onChange={ef('gender')}
+                        className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
+                        <option value="">Select</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="non_binary">Non-binary</option>
+                        <option value="prefer_not_to_say">Prefer not to say</option>
+                      </select>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <label className="text-xs text-gray-400 font-medium w-32 flex-shrink-0 mt-1.5">Bio</label>
+                      <textarea value={editForm.bio || ''} onChange={ef('bio')} rows={3}
+                        className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white resize-none"/>
+                    </div>
+                  </div>
+                ) : (
                 <div className="bg-gray-50 rounded-xl px-4 py-1">
                   <InfoRow label="Full Name"    value={user.name}/>
                   <InfoRow label="Email"        value={user.email}/>
@@ -276,37 +431,82 @@ export default function UserDetail() {
                   <InfoRow label="Joined"       value={user.created_at ? new Date(user.created_at).toLocaleString('en-IN') : null}/>
                   <InfoRow label="Last Updated" value={user.updated_at ? new Date(user.updated_at).toLocaleString('en-IN') : null}/>
                 </div>
+                )}
               </div>
               <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Account Status</p>
-                <div className="bg-gray-50 rounded-xl px-4 py-1">
-                  <InfoRow label="Status"    value={<Badge color={statusColor}>{status}</Badge>}/>
-                  <InfoRow label="Verified"  value={user.is_verified ? <Badge color="blue">Verified</Badge> : <Badge color="gray">Not Verified</Badge>}/>
-                  <InfoRow label="Admin"     value={user.is_admin ? <Badge color="purple">Yes</Badge> : 'No'}/>
-                  <InfoRow label="Onboarding" value={user.onboarding_completed ? <Badge color="green">Completed</Badge> : <Badge color="yellow">Pending</Badge>}/>
-                  <InfoRow label="Discovery Filter" value={<span className="capitalize">{user.preferred_gender_filter?.replace(/_/g,' ')}</span>}/>
-                </div>
-
-                {user.user_type === 'professional' && (
-                  <>
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 mt-5">Professional Details</p>
-                    <div className="bg-gray-50 rounded-xl px-4 py-1">
-                      <InfoRow label="Specialty"   value={user.specialty}/>
-                      <InfoRow label="Credentials" value={user.credentials?.join(', ')}/>
+                {editMode ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Account & Role</p>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-gray-400 font-medium w-32 flex-shrink-0">User Type</label>
+                      <select value={editForm.user_type || ''} onChange={ef('user_type')}
+                        className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
+                        <option value="">Select</option>
+                        <option value="regular">Regular</option>
+                        <option value="professional">Professional</option>
+                      </select>
                     </div>
-                  </>
-                )}
-
-                {(user.latitude && user.longitude) && (
-                  <>
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 mt-5">Location</p>
-                    <div className="bg-gray-50 rounded-xl px-4 py-1">
-                      <InfoRow label="Latitude"  value={user.latitude?.toFixed(4)}/>
-                      <InfoRow label="Longitude" value={user.longitude?.toFixed(4)}/>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-gray-400 font-medium w-32 flex-shrink-0">Fitness Level</label>
+                      <select value={editForm.fitness_level || ''} onChange={ef('fitness_level')}
+                        className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
+                        <option value="">Select</option>
+                        <option value="beginner">Beginner</option>
+                        <option value="intermediate">Intermediate</option>
+                        <option value="advanced">Advanced</option>
+                      </select>
                     </div>
+                    {(editForm.user_type === 'professional' || user.user_type === 'professional') && (
+                      <>
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 mt-4">Professional Details</p>
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs text-gray-400 font-medium w-32 flex-shrink-0">Specialty</label>
+                          <input type="text" value={editForm.specialty || ''} onChange={ef('specialty')}
+                            className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"/>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <label className="text-xs text-gray-400 font-medium w-32 flex-shrink-0 mt-1.5">Credentials</label>
+                          <textarea value={editForm.credentials || ''} onChange={ef('credentials')} rows={2}
+                            placeholder="Comma-separated, e.g. CPT, RD"
+                            className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white resize-none"/>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Account Status</p>
+                    <div className="bg-gray-50 rounded-xl px-4 py-1">
+                      <InfoRow label="Status"    value={<Badge color={statusColor}>{status}</Badge>}/>
+                      <InfoRow label="Verified"  value={user.is_verified ? <Badge color="blue">Verified</Badge> : <Badge color="gray">Not Verified</Badge>}/>
+                      <InfoRow label="Admin"     value={user.is_admin ? <Badge color="purple">Yes</Badge> : 'No'}/>
+                      <InfoRow label="Onboarding" value={user.onboarding_completed ? <Badge color="green">Completed</Badge> : <Badge color="yellow">Pending</Badge>}/>
+                      <InfoRow label="Discovery Filter" value={<span className="capitalize">{user.preferred_gender_filter?.replace(/_/g,' ')}</span>}/>
+                    </div>
+
+                    {user.user_type === 'professional' && (
+                      <>
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 mt-5">Professional Details</p>
+                        <div className="bg-gray-50 rounded-xl px-4 py-1">
+                          <InfoRow label="Specialty"   value={user.specialty}/>
+                          <InfoRow label="Credentials" value={user.credentials?.join(', ')}/>
+                        </div>
+                      </>
+                    )}
+
+                    {(user.latitude && user.longitude) && (
+                      <>
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 mt-5">Location</p>
+                        <div className="bg-gray-50 rounded-xl px-4 py-1">
+                          <InfoRow label="Latitude"  value={user.latitude?.toFixed(4)}/>
+                          <InfoRow label="Longitude" value={user.longitude?.toFixed(4)}/>
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </div>
+            </div>
             </div>
           )}
 
@@ -397,18 +597,36 @@ export default function UserDetail() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Profile Photos</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{photos.length} of 6 slots used</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{photos.length} of 6 slots used · drag arrows to reorder</p>
                 </div>
-                {photos.length === 0 && <Badge color="yellow">No photos uploaded</Badge>}
+                <div className="flex items-center gap-2">
+                  {reorderLoading && (
+                    <svg className="animate-spin w-4 h-4 text-indigo-400" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity=".3"/>
+                      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+                    </svg>
+                  )}
+                  {photos.length < 6 && (
+                    <label className={`flex items-center gap-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${photoUploading ? 'opacity-60 pointer-events-none' : ''}`}>
+                      {photoUploading ? (
+                        <><svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity=".3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/></svg>Uploading…</>
+                      ) : (
+                        <><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Photo</>
+                      )}
+                      <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+                        onChange={e => { handleAddPhoto(e.target.files?.[0]); e.target.value = ''; }}/>
+                    </label>
+                  )}
+                </div>
               </div>
               {photos.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {photos.map(photo => (
+                  {photos.map((photo, idx) => (
                     <div key={photo.id} className="relative group rounded-xl overflow-hidden aspect-square bg-gray-100 border border-gray-200">
-                      <img src={photo.url} alt={`Photo ${photo.position}`} className="w-full h-full object-cover"/>
+                      <img src={photo.url} alt={`Photo ${idx + 1}`} className="w-full h-full object-cover"/>
 
                       {/* Profile badge */}
-                      {photo.position === 1 && (
+                      {idx === 0 && (
                         <div className="absolute top-2 left-2">
                           <span className="bg-indigo-600 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full shadow">Profile</span>
                         </div>
@@ -416,7 +634,7 @@ export default function UserDetail() {
 
                       {/* Position number */}
                       <div className="absolute bottom-2 left-2">
-                        <span className="bg-black/50 text-white text-[10px] px-2 py-0.5 rounded-full">#{photo.position}</span>
+                        <span className="bg-black/50 text-white text-[10px] px-2 py-0.5 rounded-full">#{idx + 1}</span>
                       </div>
 
                       {/* Hover overlay — View + Delete */}
@@ -447,17 +665,38 @@ export default function UserDetail() {
                           Delete
                         </button>
                       </div>
+
+                      {/* Reorder arrows — rendered after overlay so they sit on top */}
+                      <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                        <button onClick={() => handleReorder(idx, idx - 1)} disabled={idx === 0 || reorderLoading}
+                          title="Move left"
+                          className="w-6 h-6 bg-white/90 hover:bg-white text-gray-700 rounded-md flex items-center justify-center shadow disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3">
+                            <polyline points="18 15 12 9 6 15"/>
+                          </svg>
+                        </button>
+                        <button onClick={() => handleReorder(idx, idx + 1)} disabled={idx === photos.length - 1 || reorderLoading}
+                          title="Move right"
+                          className="w-6 h-6 bg-white/90 hover:bg-white text-gray-700 rounded-md flex items-center justify-center shadow disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3">
+                            <polyline points="6 9 12 15 18 9"/>
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                   ))}
 
-                  {/* Empty slots */}
+                  {/* Empty slots — clickable to add */}
                   {Array.from({ length: 6 - photos.length }).map((_, i) => (
-                    <div key={`empty-${i}`} className="rounded-xl aspect-square bg-gray-50 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-1">
+                    <label key={`empty-${i}`}
+                      className={`rounded-xl aspect-square bg-gray-50 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors ${photoUploading ? 'pointer-events-none opacity-50' : ''}`}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-gray-300">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+                        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                       </svg>
-                      <span className="text-[10px] text-gray-300">Empty</span>
-                    </div>
+                      <span className="text-[10px] text-gray-300">Add Photo</span>
+                      <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+                        onChange={e => { handleAddPhoto(e.target.files?.[0]); e.target.value = ''; }}/>
+                    </label>
                   ))}
                 </div>
               ) : (
@@ -466,6 +705,12 @@ export default function UserDetail() {
                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
                   </svg>
                   <p className="text-sm">No photos uploaded yet</p>
+                  <label className="mt-3 inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 px-4 py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Upload First Photo
+                    <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+                      onChange={e => { handleAddPhoto(e.target.files?.[0]); e.target.value = ''; }}/>
+                  </label>
                 </div>
               )}
             </div>
