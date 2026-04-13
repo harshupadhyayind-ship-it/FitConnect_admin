@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import api from '../config/api';
+import { useDialog } from '../components/Dialog';
 
-const STATUS_COLORS = {
-  pending:   'bg-yellow-100 text-yellow-700',
-  resolved:  'bg-green-100 text-green-700',
-  dismissed: 'bg-gray-100 text-gray-500',
+const statusStyle = {
+  pending:   'bg-amber-50 text-amber-600 border-amber-100',
+  resolved:  'bg-emerald-50 text-emerald-600 border-emerald-100',
+  dismissed: 'bg-gray-100 text-gray-500 border-gray-200',
 };
 
 export default function Moderation() {
+  const { showAlert, showConfirm } = useDialog();
   const [reports, setReports] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -38,33 +40,37 @@ export default function Moderation() {
       await api.patch(`/admin/moderation/reports/${selected.id}/resolve`, { action: resolveAction, notes });
       setSelected(null);
       fetchReports();
-    } catch (err) { alert(err.response?.data?.error || err.message); }
+    } catch (err) { showAlert(err.response?.data?.error || err.message, { title: 'Action Failed', variant: 'error' }); }
     finally { setActioning(false); }
   };
 
   const handleDismiss = async (reportId) => {
-    if (!confirm('Dismiss this report?')) return;
+    const ok = await showConfirm('Mark this report as dismissed? No action will be taken against the reported user.', {
+      title: 'Dismiss Report',
+      variant: 'warning',
+      confirmText: 'Dismiss',
+    });
+    if (!ok) return;
     try { await api.patch(`/admin/moderation/reports/${reportId}/dismiss`); fetchReports(); }
-    catch (err) { alert(err.response?.data?.error || err.message); }
+    catch (err) { showAlert(err.response?.data?.error || err.message, { title: 'Dismiss Failed', variant: 'error' }); }
   };
 
+  const tabs = ['pending', 'resolved', 'dismissed'];
+
   return (
-    <div className="space-y-4 lg:space-y-6">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-xl lg:text-2xl font-bold text-gray-900">Moderation</h1>
-        <p className="text-gray-500 text-sm mt-1">{total} reports</p>
+        <h1 className="text-xl font-bold text-gray-900">Moderation</h1>
+        <p className="text-gray-400 text-sm mt-0.5">{total} reports</p>
       </div>
 
-      {/* Status Tabs */}
-      <div className="flex gap-2 flex-wrap">
-        {['pending', 'resolved', 'dismissed'].map(s => (
-          <button
-            key={s}
-            onClick={() => { setStatus(s); setPage(1); }}
-            className={`px-3 lg:px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
-              status === s ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-            }`}
-          >
+      {/* Tabs */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+        {tabs.map(s => (
+          <button key={s} onClick={() => { setStatus(s); setPage(1); }}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium capitalize transition-all ${
+              status === s ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}>
             {s}
           </button>
         ))}
@@ -72,140 +78,151 @@ export default function Moderation() {
 
       {loading ? (
         <div className="flex items-center justify-center h-48">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-200 border-t-indigo-600"></div>
         </div>
       ) : (
         <>
           {/* Desktop Table */}
-          <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    <th className="text-left px-6 py-3 text-gray-500 font-medium">Report Details</th>
-                    <th className="text-left px-6 py-3 text-gray-500 font-medium">Type</th>
-                    <th className="text-left px-6 py-3 text-gray-500 font-medium">Status</th>
-                    <th className="text-left px-6 py-3 text-gray-500 font-medium">Date</th>
-                    <th className="text-left px-6 py-3 text-gray-500 font-medium">Actions</th>
+          <div className="hidden md:block bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/60">
+                  <th className="text-left px-6 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">Report</th>
+                  <th className="text-left px-6 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">Type</th>
+                  <th className="text-left px-6 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">Status</th>
+                  <th className="text-left px-6 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">Date</th>
+                  <th className="px-6 py-3.5"/>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {reports.length === 0 && (
+                  <tr><td colSpan={5} className="px-6 py-16 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="w-10 h-10 text-gray-200">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                      </svg>
+                      <p className="text-sm text-gray-400">No {status} reports</p>
+                    </div>
+                  </td></tr>
+                )}
+                {reports.map(r => (
+                  <tr key={r.id} className="hover:bg-gray-50/60 transition-colors">
+                    <td className="px-6 py-4 max-w-xs">
+                      <p className="font-medium text-gray-900 truncate">{r.reason || 'No reason given'}</p>
+                      <p className="text-xs text-gray-400 mt-0.5 font-mono">By {r.reporter_id?.slice(0, 14)}…</p>
+                    </td>
+                    <td className="px-6 py-4 capitalize text-gray-500 text-sm">{r.report_type || '—'}</td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border capitalize ${statusStyle[r.status] || statusStyle.dismissed}`}>{r.status}</span>
+                    </td>
+                    <td className="px-6 py-4 text-gray-400 text-sm">{r.created_at ? new Date(r.created_at).toLocaleDateString('en-IN') : '—'}</td>
+                    <td className="px-6 py-4">
+                      {r.status === 'pending' && (
+                        <div className="flex gap-2">
+                          <button onClick={() => { setSelected(r); setResolveAction('none'); setNotes(''); }}
+                            className="text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg hover:bg-emerald-100 font-medium transition-colors">
+                            Resolve
+                          </button>
+                          <button onClick={() => handleDismiss(r.id)}
+                            className="text-xs bg-gray-50 text-gray-500 px-3 py-1.5 rounded-lg hover:bg-gray-100 font-medium transition-colors">
+                            Dismiss
+                          </button>
+                        </div>
+                      )}
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {reports.length === 0 && (
-                    <tr><td colSpan={5} className="px-6 py-16 text-center text-gray-400">
-                      <p className="text-4xl mb-2">🛡️</p>
-                      <p className="text-sm">No {status} reports</p>
-                    </td></tr>
-                  )}
-                  {reports.map(r => (
-                    <tr key={r.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 max-w-xs">
-                        <p className="font-medium text-gray-900 truncate">{r.reason || 'No reason given'}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">By: <span className="font-mono">{r.reporter_id?.slice(0, 14)}...</span></p>
-                      </td>
-                      <td className="px-6 py-4 capitalize text-gray-600">{r.report_type || '—'}</td>
-                      <td className="px-6 py-4">
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium capitalize ${STATUS_COLORS[r.status] || 'bg-gray-100 text-gray-500'}`}>{r.status}</span>
-                      </td>
-                      <td className="px-6 py-4 text-gray-500 text-xs">{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
-                      <td className="px-6 py-4">
-                        {r.status === 'pending' && (
-                          <div className="flex gap-2">
-                            <button onClick={() => { setSelected(r); setResolveAction('none'); setNotes(''); }} className="text-xs bg-green-50 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 font-medium transition-colors">Resolve</button>
-                            <button onClick={() => handleDismiss(r.id)} className="text-xs bg-gray-50 text-gray-500 px-3 py-1.5 rounded-lg hover:bg-gray-100 font-medium transition-colors">Dismiss</button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
             {total > limit && (
-              <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
-                <p className="text-sm text-gray-500">Page {page} of {Math.ceil(total / limit)}</p>
-                <div className="flex gap-2">
-                  <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page===1} className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-40 hover:bg-gray-50">← Prev</button>
-                  <button onClick={() => setPage(p => p+1)} disabled={page*limit>=total} className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-40 hover:bg-gray-50">Next →</button>
+              <div className="px-6 py-3.5 border-t border-gray-100 bg-gray-50/40 flex items-center justify-between">
+                <p className="text-xs text-gray-400">Page {page} of {Math.ceil(total / limit)}</p>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page===1}
+                    className="p-1.5 rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-white">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-gray-500"><polyline points="15 18 9 12 15 6"/></svg>
+                  </button>
+                  <button onClick={() => setPage(p => p+1)} disabled={page*limit>=total}
+                    className="p-1.5 rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-white">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-gray-500"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Mobile Card List */}
-          <div className="md:hidden space-y-3">
+          {/* Mobile Cards */}
+          <div className="md:hidden space-y-2">
             {reports.length === 0 && (
-              <div className="text-center py-12 text-gray-400 bg-white rounded-xl border border-gray-100">
-                <p className="text-3xl mb-2">🛡️</p>
-                <p className="text-sm">No {status} reports</p>
-              </div>
+              <div className="text-center py-12 text-gray-400 bg-white rounded-2xl border border-gray-100">No {status} reports</div>
             )}
             {reports.map(r => (
               <div key={r.id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm space-y-2">
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-medium text-gray-900 text-sm flex-1">{r.reason || 'No reason given'}</p>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize flex-shrink-0 ${STATUS_COLORS[r.status] || 'bg-gray-100 text-gray-500'}`}>{r.status}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize border flex-shrink-0 ${statusStyle[r.status] || statusStyle.dismissed}`}>{r.status}</span>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-gray-400">
-                  <span className="capitalize">{r.report_type || '—'}</span>
-                  <span>·</span>
-                  <span>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</span>
-                </div>
+                <p className="text-xs text-gray-400">{r.report_type || '—'} · {r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</p>
                 {r.status === 'pending' && (
                   <div className="flex gap-2 pt-1">
-                    <button onClick={() => { setSelected(r); setResolveAction('none'); setNotes(''); }} className="flex-1 text-center text-xs bg-green-50 text-green-700 py-1.5 rounded-lg hover:bg-green-100 font-medium">Resolve</button>
-                    <button onClick={() => handleDismiss(r.id)} className="flex-1 text-center text-xs bg-gray-50 text-gray-500 py-1.5 rounded-lg hover:bg-gray-100 font-medium">Dismiss</button>
+                    <button onClick={() => { setSelected(r); setResolveAction('none'); setNotes(''); }}
+                      className="flex-1 text-xs bg-emerald-50 text-emerald-700 py-1.5 rounded-lg font-medium">Resolve</button>
+                    <button onClick={() => handleDismiss(r.id)}
+                      className="flex-1 text-xs bg-gray-50 text-gray-500 py-1.5 rounded-lg font-medium">Dismiss</button>
                   </div>
                 )}
               </div>
             ))}
-            {total > limit && (
-              <div className="flex items-center justify-between pt-1">
-                <p className="text-xs text-gray-500">{total} total</p>
-                <div className="flex gap-2">
-                  <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page===1} className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg disabled:opacity-40 bg-white">← Prev</button>
-                  <span className="px-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg">{page}</span>
-                  <button onClick={() => setPage(p => p+1)} disabled={page*limit>=total} className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg disabled:opacity-40 bg-white">Next →</button>
-                </div>
-              </div>
-            )}
           </div>
         </>
       )}
 
       {/* Resolve Modal */}
       {selected && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-md">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md">
             <div className="p-5 border-b border-gray-100">
-              <h2 className="text-base font-bold text-gray-900">Resolve Report</h2>
-              <p className="text-sm text-gray-500 mt-1 line-clamp-2">{selected.reason}</p>
+              <h2 className="text-base font-semibold text-gray-900">Resolve Report</h2>
+              <p className="text-sm text-gray-400 mt-1 line-clamp-2">{selected.reason}</p>
             </div>
             <div className="p-5 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Action</label>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Action</p>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { value: 'none',           label: '👍 No Action' },
-                    { value: 'warn',           label: '⚠️ Warn User' },
-                    { value: 'ban',            label: '🚫 Ban User' },
-                    { value: 'delete_content', label: '🗑 Delete Content' },
+                    { value: 'none',           label: 'No Action',      icon: 'M5 13l4 4L19 7' },
+                    { value: 'warn',           label: 'Warn User',      icon: 'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01' },
+                    { value: 'ban',            label: 'Ban User',       icon: 'M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636' },
+                    { value: 'delete_content', label: 'Delete Content', icon: 'M3 6h18M19 6l-1 14H6L5 6M8 6V4h8v2' },
                   ].map(a => (
-                    <button key={a.value} onClick={() => setResolveAction(a.value)} className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors border ${resolveAction === a.value ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                    <button key={a.value} onClick={() => setResolveAction(a.value)}
+                      className={`flex items-center gap-2 py-2.5 px-3 rounded-xl text-sm font-medium transition-all border ${
+                        resolveAction === a.value ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 flex-shrink-0">
+                        <path d={a.icon}/>
+                      </svg>
                       {a.label}
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Optional notes..." className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none" />
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">Notes</label>
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
+                  placeholder="Optional notes..."
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"/>
               </div>
             </div>
             <div className="p-5 border-t border-gray-100 flex gap-3">
-              <button onClick={handleResolve} disabled={actioning} className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors">
-                {actioning ? 'Resolving...' : 'Confirm'}
+              <button onClick={handleResolve} disabled={actioning}
+                className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl font-medium hover:bg-indigo-700 disabled:opacity-50 text-sm transition-colors">
+                {actioning ? 'Resolving…' : 'Confirm'}
               </button>
-              <button onClick={() => setSelected(null)} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-xl font-medium hover:bg-gray-200 transition-colors">Cancel</button>
+              <button onClick={() => setSelected(null)}
+                className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-xl font-medium hover:bg-gray-200 text-sm transition-colors">
+                Cancel
+              </button>
             </div>
           </div>
         </div>
