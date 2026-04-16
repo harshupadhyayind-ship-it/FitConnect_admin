@@ -133,10 +133,13 @@ export default function UserDetail() {
       date_of_birth: user.date_of_birth ? user.date_of_birth.split('T')[0] : '',
       height_cm:    user.height_cm    != null ? String(user.height_cm) : '',
       weight_kg:    user.weight_kg    != null ? String(user.weight_kg) : '',
-      fitness_level: user.fitness_level || '',
-      user_type:    user.user_type    || '',
-      specialty:    user.specialty    || '',
-      credentials:  (user.credentials || []).join(', '),
+      fitness_level:           user.fitness_level           || '',
+      user_type:               user.user_type               || '',
+      specialty:               user.specialty               || '',
+      credentials:             (user.credentials || []).join(', '),
+      preferred_gender_filter: user.preferred_gender_filter || '',
+      preferred_training_time: user.preferred_training_time || [],
+      location:                user.location                || '',
     });
     setEditMode(true);
   };
@@ -456,6 +459,56 @@ export default function UserDetail() {
                         <option value="advanced">Advanced</option>
                       </select>
                     </div>
+
+                    {/* Match preference */}
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-2 pb-1">Match Preference</p>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-gray-400 font-medium w-32 flex-shrink-0">Connect with</label>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {[['everyone', 'Everyone'], ['men', 'Men'], ['women', 'Women']].map(([val, label]) => (
+                          <button key={val} type="button"
+                            onClick={() => setEditForm(f => ({ ...f, preferred_gender_filter: val }))}
+                            className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                              editForm.preferred_gender_filter === val
+                                ? 'bg-orange-500 text-white border-orange-500'
+                                : 'bg-white text-gray-600 border-gray-200 hover:border-orange-400'
+                            }`}>
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-gray-400 font-medium w-32 flex-shrink-0">Location</label>
+                      <input type="text" value={editForm.location || ''} onChange={ef('location')}
+                        placeholder="City"
+                        className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"/>
+                    </div>
+
+                    {/* Preferred training time */}
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-2 pb-1">Preferred Training Time</p>
+                    <div className="flex flex-wrap gap-1.5 ml-0">
+                      {[['mornings', 'Mornings'], ['afternoons', 'Afternoons'], ['evenings', 'Evenings'], ['weekends', 'Weekends']].map(([val, label]) => {
+                        const times = Array.isArray(editForm.preferred_training_time) ? editForm.preferred_training_time : [];
+                        const active = times.includes(val);
+                        return (
+                          <button key={val} type="button"
+                            onClick={() => setEditForm(f => {
+                              const cur = Array.isArray(f.preferred_training_time) ? f.preferred_training_time : [];
+                              return { ...f, preferred_training_time: active ? cur.filter(t => t !== val) : [...cur, val] };
+                            })}
+                            className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                              active
+                                ? 'bg-orange-500 text-white border-orange-500'
+                                : 'bg-white text-gray-600 border-gray-200 hover:border-orange-400'
+                            }`}>
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
                     {(editForm.user_type === 'professional' || user.user_type === 'professional') && (
                       <>
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 mt-4">Professional Details</p>
@@ -481,7 +534,9 @@ export default function UserDetail() {
                       <InfoRow label="Verified"  value={user.is_verified ? <Badge color="blue">Verified</Badge> : <Badge color="gray">Not Verified</Badge>}/>
                       <InfoRow label="Admin"     value={user.is_admin ? <Badge color="purple">Yes</Badge> : 'No'}/>
                       <InfoRow label="Onboarding" value={user.onboarding_completed ? <Badge color="green">Completed</Badge> : <Badge color="yellow">Pending</Badge>}/>
-                      <InfoRow label="Discovery Filter" value={<span className="capitalize">{user.preferred_gender_filter?.replace(/_/g,' ')}</span>}/>
+                      <InfoRow label="Connect With"     value={<span className="capitalize">{user.preferred_gender_filter?.replace(/_/g,' ')}</span>}/>
+                      <InfoRow label="Location"        value={user.location}/>
+                      <InfoRow label="Training Time"   value={Array.isArray(user.preferred_training_time) && user.preferred_training_time.length > 0 ? user.preferred_training_time.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(', ') : null}/>
                     </div>
 
                     {user.user_type === 'professional' && (
