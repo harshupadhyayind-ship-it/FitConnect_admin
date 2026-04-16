@@ -137,9 +137,15 @@ export default function UserDetail() {
       user_type:               user.user_type               || '',
       specialty:               user.specialty               || '',
       credentials:             (user.credentials || []).join(', '),
-      preferred_gender_filter: user.preferred_gender_filter || '',
-      preferred_training_time: user.preferred_training_time || [],
-      location:                user.location                || '',
+      preferred_gender_filter: user.preferred_gender_filter  || '',
+      preferred_training_time: user.preferred_training_time  || [],
+      location:                user.location                 || '',
+      specialties:             user.specialties              || [],
+      years_of_experience:     user.years_of_experience      || '',
+      session_rate:            user.session_rate             || '',
+      prompt_philosophy:       user.prompt_philosophy        || '',
+      prompt_best_result:      user.prompt_best_result       || '',
+      prompt_love_working:     user.prompt_love_working      || '',
     });
     setEditMode(true);
   };
@@ -511,18 +517,83 @@ export default function UserDetail() {
 
                     {(editForm.user_type === 'professional' || user.user_type === 'professional') && (
                       <>
-                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 mt-4">Professional Details</p>
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide pb-1 pt-3">Professional Details</p>
+
+                        {/* Specialties — multi-select pills, up to 3 */}
+                        <div>
+                          <label className="text-xs text-gray-400 font-medium block mb-1.5">
+                            Specialties <span className="text-gray-300">(pick up to 3)</span>
+                          </label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {['Personal Trainer','Strength Coach','HIIT Trainer','Yoga Coach','Nutritionist',
+                              'Pilates','CrossFit','Physiotherapist','Sports Physio','Powerlifting',
+                              'Calisthenics','Meditation','Mobility','Bodybuilding','Injury Rehab'].map(s => {
+                              const arr = Array.isArray(editForm.specialties) ? editForm.specialties : [];
+                              const active = arr.includes(s);
+                              return (
+                                <button key={s} type="button"
+                                  onClick={() => setEditForm(f => {
+                                    const cur = Array.isArray(f.specialties) ? f.specialties : [];
+                                    if (active) return { ...f, specialties: cur.filter(x => x !== s) };
+                                    if (cur.length >= 3) return f; // max 3
+                                    return { ...f, specialties: [...cur, s] };
+                                  })}
+                                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                                    active ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-600 border-gray-200 hover:border-orange-400'
+                                  }`}>
+                                  {s}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Years of experience */}
+                        <div className="flex items-center gap-2 mt-1">
+                          <label className="text-xs text-gray-400 font-medium w-32 flex-shrink-0">Years Exp.</label>
+                          <div className="flex gap-1.5 flex-wrap">
+                            {['0-1','1-3','3-5','5-10','10+'].map(y => (
+                              <button key={y} type="button"
+                                onClick={() => setEditForm(f => ({ ...f, years_of_experience: y }))}
+                                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                                  editForm.years_of_experience === y ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-600 border-gray-200 hover:border-orange-400'
+                                }`}>
+                                {y}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Session rate */}
                         <div className="flex items-center gap-2">
-                          <label className="text-xs text-gray-400 font-medium w-32 flex-shrink-0">Specialty</label>
-                          <input type="text" value={editForm.specialty || ''} onChange={ef('specialty')}
+                          <label className="text-xs text-gray-400 font-medium w-32 flex-shrink-0">Session Rate</label>
+                          <input type="text" value={editForm.session_rate || ''} onChange={ef('session_rate')}
+                            placeholder="e.g. ₹800-₹1,200 / session"
                             className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"/>
                         </div>
+
+                        {/* Credentials */}
                         <div className="flex items-start gap-2">
                           <label className="text-xs text-gray-400 font-medium w-32 flex-shrink-0 mt-1.5">Credentials</label>
                           <textarea value={editForm.credentials || ''} onChange={ef('credentials')} rows={2}
                             placeholder="Comma-separated, e.g. CPT, RD"
                             className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white resize-none"/>
                         </div>
+
+                        {/* Prompts */}
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide pb-1 pt-3">Profile Prompts</p>
+                        {[
+                          { key: 'prompt_philosophy',   label: 'My Training Philosophy' },
+                          { key: 'prompt_best_result',  label: "Best Result I've Achieved" },
+                          { key: 'prompt_love_working', label: "You'll Love Working With Me If" },
+                        ].map(({ key, label }) => (
+                          <div key={key} className="flex items-start gap-2">
+                            <label className="text-xs text-gray-400 font-medium w-32 flex-shrink-0 mt-1.5 leading-tight">{label}</label>
+                            <textarea value={editForm[key] || ''} onChange={ef(key)} rows={2}
+                              placeholder="Write your answer…"
+                              className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white resize-none"/>
+                          </div>
+                        ))}
                       </>
                     )}
                   </div>
@@ -543,9 +614,37 @@ export default function UserDetail() {
                       <>
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 mt-5">Professional Details</p>
                         <div className="bg-gray-50 rounded-xl px-4 py-1">
-                          <InfoRow label="Specialty"   value={user.specialty}/>
-                          <InfoRow label="Credentials" value={user.credentials?.join(', ')}/>
+                          <InfoRow label="Specialty"    value={user.specialty}/>
+                          <InfoRow label="Specialties"  value={user.specialties?.length > 0 ? user.specialties.join(', ') : null}/>
+                          <InfoRow label="Experience"   value={user.years_of_experience ? `${user.years_of_experience} years` : null}/>
+                          <InfoRow label="Session Rate" value={user.session_rate}/>
+                          <InfoRow label="Credentials"  value={user.credentials?.join(', ')}/>
                         </div>
+                        {(user.prompt_philosophy || user.prompt_best_result || user.prompt_love_working) && (
+                          <>
+                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 mt-5">Profile Prompts</p>
+                            <div className="space-y-2">
+                              {user.prompt_philosophy && (
+                                <div className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
+                                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">My Training Philosophy</p>
+                                  <p className="text-xs text-gray-700">"{user.prompt_philosophy}"</p>
+                                </div>
+                              )}
+                              {user.prompt_best_result && (
+                                <div className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
+                                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Best Result I've Achieved</p>
+                                  <p className="text-xs text-gray-700">"{user.prompt_best_result}"</p>
+                                </div>
+                              )}
+                              {user.prompt_love_working && (
+                                <div className="bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
+                                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">You'll Love Working With Me If</p>
+                                  <p className="text-xs text-gray-700">"{user.prompt_love_working}"</p>
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
                       </>
                     )}
 
