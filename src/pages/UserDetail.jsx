@@ -140,7 +140,7 @@ export default function UserDetail() {
       preferred_gender_filter: user.preferred_gender_filter  || '',
       preferred_training_time: user.preferred_training_time  || [],
       location:                user.location                 || '',
-      specialties:             user.specialties              || [],
+      specialty:               user.specialty                 || [],
       years_of_experience:     user.years_of_experience      || '',
       session_rate:            user.session_rate             || '',
       prompt_philosophy:       user.prompt_philosophy        || '',
@@ -528,12 +528,12 @@ export default function UserDetail() {
                             {['Personal Trainer','Strength Coach','HIIT Trainer','Yoga Coach','Nutritionist',
                               'Pilates','CrossFit','Physiotherapist','Sports Physio','Powerlifting',
                               'Calisthenics','Meditation','Mobility','Bodybuilding','Injury Rehab'].map(s => {
-                              const arr = Array.isArray(editForm.specialties) ? editForm.specialties : [];
+                              const arr = Array.isArray(editForm.specialty) ? editForm.specialty : [];
                               const active = arr.includes(s);
                               return (
                                 <button key={s} type="button"
                                   onClick={() => setEditForm(f => {
-                                    const cur = Array.isArray(f.specialties) ? f.specialties : [];
+                                    const cur = Array.isArray(f.specialty) ? f.specialty : [];
                                     if (active) return { ...f, specialties: cur.filter(x => x !== s) };
                                     if (cur.length >= 3) return f; // max 3
                                     return { ...f, specialties: [...cur, s] };
@@ -614,8 +614,7 @@ export default function UserDetail() {
                       <>
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 mt-5">Professional Details</p>
                         <div className="bg-gray-50 rounded-xl px-4 py-1">
-                          <InfoRow label="Specialty"    value={user.specialty}/>
-                          <InfoRow label="Specialties"  value={user.specialties?.length > 0 ? user.specialties.join(', ') : null}/>
+                          <InfoRow label="Specialty" value={Array.isArray(user.specialty) ? user.specialty.join(', ') : user.specialty}/>
                           <InfoRow label="Experience"   value={user.years_of_experience ? `${user.years_of_experience} years` : null}/>
                           <InfoRow label="Session Rate" value={user.session_rate}/>
                           <InfoRow label="Credentials"  value={user.credentials?.join(', ')}/>
